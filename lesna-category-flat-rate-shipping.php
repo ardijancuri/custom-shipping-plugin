@@ -73,6 +73,7 @@ final class Lesna_Category_Flat_Rate_Shipping {
 			4
 		);
 		add_filter( 'woocommerce_package_rates', array( $this, 'filter_package_rates' ), 20, 2 );
+		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 	}
 
 	/**
@@ -86,6 +87,29 @@ final class Lesna_Category_Flat_Rate_Shipping {
 		printf(
 			'<div class="notice notice-error"><p>%s</p></div>',
 			esc_html__( 'Lesna Category Flat Rate Shipping requires WooCommerce to be active.', 'lesna-category-flat-rate-shipping' )
+		);
+	}
+
+	/**
+	 * Enqueue admin assets for the WooCommerce shipping settings screens.
+	 *
+	 * @param string $hook_suffix Current admin page hook.
+	 */
+	public function enqueue_admin_assets( $hook_suffix ) {
+		if ( 'woocommerce_page_wc-settings' !== $hook_suffix ) {
+			return;
+		}
+
+		if ( empty( $_GET['tab'] ) || 'shipping' !== sanitize_key( wp_unslash( $_GET['tab'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+
+		wp_enqueue_script(
+			'lesna-category-flat-rate-shipping-admin',
+			plugin_dir_url( __FILE__ ) . 'assets/js/lesna-category-flat-rate-shipping-admin.js',
+			array( 'jquery' ),
+			'1.1.0',
+			true
 		);
 	}
 
@@ -104,7 +128,7 @@ final class Lesna_Category_Flat_Rate_Shipping {
 			'default'     => array(),
 			'desc_tip'    => true,
 			'description' => __(
-				'Check one or more categories to make this flat rate available for matching products. Leave all checkboxes unchecked to keep this rate available for all products. Child categories are not matched unless checked explicitly.',
+				'Checking a parent category auto-selects all of its child categories. You can manually disable individual child categories before saving. Unchecking a parent clears all of its descendants. Leave all checkboxes unchecked to keep this rate available for all products.',
 				'lesna-category-flat-rate-shipping'
 			),
 			'custom_attributes' => array(),
@@ -162,6 +186,8 @@ final class Lesna_Category_Flat_Rate_Shipping {
 										type="checkbox"
 										name="<?php echo esc_attr( $field_key ); ?>[]"
 										value="<?php echo esc_attr( $category['term_id'] ); ?>"
+										data-term-id="<?php echo esc_attr( $category['term_id'] ); ?>"
+										data-parent-term-id="<?php echo esc_attr( $category['parent_id'] ); ?>"
 										<?php checked( in_array( $category['term_id'], $value, true ) ); ?>
 										<?php disabled( $data['disabled'], true ); ?>
 										<?php echo $wc_settings->get_custom_attribute_html( $data ); // WPCS: XSS ok. ?>
@@ -293,7 +319,8 @@ final class Lesna_Category_Flat_Rate_Shipping {
 			$flat[] = array(
 				'term_id' => (int) $term->term_id,
 				'name'    => $term->name,
-				'depth'   => $depth,
+				'depth'     => $depth,
+				'parent_id' => (int) $parent_id,
 			);
 
 			$flat = array_merge(
